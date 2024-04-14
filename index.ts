@@ -22,7 +22,7 @@ const generatePage = (req, title, content, lastUpdated) => {
 	return `<!DOCTYPE html>
 <html>
 <head>
-  <title>Wiki</title>
+  <title>${"System:Site_Name" in pages ? pages["System:Site_Name"].content : "Wiki"}</title>
   <link rel="stylesheet" href="https://en.wikipedia.org/w/load.php?lang=en&modules=ext.DarkMode.styles%7Cext.MobileDetect.mobileonly%7Cext.echo.styles.badge%7Cext.visualEditor.desktopArticleTarget.noscript%7Cmediawiki.page.gallery.styles%7Coojs-ui.styles.icons-alerts%7Cskins.vector.styles.legacy&only=styles&skin=vector">
   <style>
     .mw-wiki-logo {
