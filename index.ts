@@ -18,7 +18,7 @@ app.use(upload.array());
 app.use(cookieParser())
 
 const generatePage = (req, title, content, lastUpdated) => {
-	const user = Object.entries(accounts).find(([name, data]) => data.token === crypto.createHash("sha256").update(req.cookies.token).digest("hex"))
+	const user = req.cookies.token ? Object.entries(accounts).find(([name, data]) => data.token === crypto.createHash("sha256").update(req.cookies.token).digest("hex")) : null;
 	return `<!DOCTYPE html>
 <html>
 <head>
@@ -230,7 +230,7 @@ app.post("/:page", async (req, res) => {
 	}
 	if (req.query.action === "submit") {
 		console.log(req.body)
-		const user = Object.entries(accounts).find(([name, data]) => data.token === crypto.createHash("sha256").update(req.cookies.token).digest("hex"))
+		const user = req.cookies.token ? Object.entries(accounts).find(([name, data]) => data.token === crypto.createHash("sha256").update(req.cookies.token).digest("hex")) : null
 		if (!user) return res.send(generateReadPage(req, "Editing failed", "You need to be logged in.", ""))
 		const username = user[0]
 		if (req.params.page in pages) {
