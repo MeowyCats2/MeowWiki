@@ -14,7 +14,6 @@ const timeAgo = new TimeAgo("en-US")
 const app = express();
 const port = 8080;
 
-app.use(upload.array()); 
 app.use(cookieParser())
 
 const generatePage = (req, title, content, lastUpdated) => {
@@ -26,7 +25,11 @@ const generatePage = (req, title, content, lastUpdated) => {
   <link rel="stylesheet" href="https://en.wikipedia.org/w/load.php?lang=en&modules=ext.DarkMode.styles%7Cext.MobileDetect.mobileonly%7Cext.echo.styles.badge%7Cext.visualEditor.desktopArticleTarget.noscript%7Cmediawiki.page.gallery.styles%7Coojs-ui.styles.icons-alerts%7Cskins.vector.styles.legacy&only=styles&skin=vector">
   <style>
     .mw-wiki-logo {
-	  background: white;
+	  background: ${"File:Site_icon" in pages ? `url("/Special:File/File:Site_icon")` : "white"};
+	  background-size: contain;
+	}
+	.mw-parser-output img {
+	  max-width: 100%;
 	}
   </style>
 </head>
@@ -167,6 +170,15 @@ let accounts = {}
 app.get("/", (req, res) => {
 	res.redirect("System:Main_Page" in pages ? "/" + pages["System:Main_Page"].content.replaceAll(" ", "_") : "/Main_Page")
 })
+let cachedSiteIcon = null;
+app.get("/Special[:]File/:page", async (req, res) => {
+	if (!(req.params.page in pages)) return res.send("Unknown file")
+	if (req.params.page === "File:Site_icon" && cachedSiteIcon) return res.set("Content-Type", pages[req.params.page].mimetype).send(Buffer.from(cachedSiteIcon))
+	const msg = (await (await mfetch(process.env.webhook + "/messages/" + pages[req.params.page].file, {"cache": "no-store"})).json())
+	const data = await (await mfetch(msg.attachments[0].url)).arrayBuffer()
+	if (req.params.page === "File:Site_icon") cachedSiteIcon = data;
+	res.set("Content-Type", pages[req.params.page].mimetype).send(Buffer.from(data))
+})
 app.get("/:page", (req, res) => {
 	if (req.params.page.includes(" ")) return res.redirect(req.url.replaceAll("%20", "_"))
 	const lastUpdated = req.params.page in pages ? "Last updated " + timeAgo.format(new Date(pages[req.params.page].date)) : ""
@@ -193,6 +205,14 @@ app.get("/:page", (req, res) => {
 <input type="submit" value="submit">
 </form>
 `, ""))
+		if (req.params.page === "Special:Upload") res.send(generateReadPage(req, "Upload", `<form method="POST" action="${req.url}" enctype="multipart/form-data">
+<label for="name">Name</label>
+<input type="text" name="name" id="name">
+<br/>
+<input type="file" name="file">
+<br/>
+<input type="submit" value="submit">
+</form>`))
 		return
 	}
 	if (!req.query.action) {
@@ -207,7 +227,11 @@ app.get("/:page", (req, res) => {
 			destination = content.replaceAll(" ", "_")
 			show = content
 		}
-		return `<a href="/${destination}"${!(destination in pages) ? ` class="new"` : ""}>${show}</a>`
+		if (destination in pages && pages[destination].file) {
+			return `<img src="/Special:File/${destination}" alt="${show}">`
+		} else {
+			return `<a href="/${destination}"${!(destination in pages) ? ` class="new"` : ""}>${show}</a>`
+		}
 		}).replaceAll(/^===(.+)===$/gm, "<h3>$1</h3>").replaceAll(/^==(.+)==$/gm, "<h2>$1</h2>").replaceAll("\n", "<br/>") : "No content.", lastUpdated));
 	}
 	if (req.query.action === "edit") return res.send(generateEditPage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? (req.query.revision ? pages[req.params.page].history[req.query.revision].content : pages[req.params.page].content) : "", lastUpdated));
@@ -223,7 +247,23 @@ app.get("/:page", (req, res) => {
 	return res.send(generateReadPage(req, "Error", "Invalid action.", ""))
 });
 
-app.post("/:page", async (req, res) => {
+app.post("/Special[:]Upload", multer({"storage": multer.memoryStorage()}).single("file"), async (req, res) => {
+	const user = req.cookies.token ? Object.entries(accounts).find(([name, data]) => data.token === crypto.createHash("sha256").update(req.cookies.token).digest("hex")) : null
+	if (!user) return res.send(generateReadPage(req, "Editing failed", "You need to be logged in.", ""))
+	const username = user[0]
+	const message = await send_file(new Blob([req.file.buffer]), req.file.originalname)
+	const page = "File:" + (req.body.name || req.file.originalname).replaceAll(" ", "_")
+	if (!(page in pages)) pages[page] = {
+      "date": new Date() + "",
+	  "content": "File",
+      "history": [{"date": new Date() + "", "content": "File", "user": username, "summary": "File uploaded."}]}
+	pages[page].file = message.id
+	pages[page].mimetype = req.file.mimetype
+	await saveToDB()
+	res.send(generateReadPage(req, "File", "" + message.id, ""))
+})
+
+app.post("/:page", upload.array(), async (req, res) => {
 	if (req.params.page.includes(" ")) return res.redirect(req.url.replaceAll("%20", "_"))
 	if (req.params.page.startsWith("Special:")) {
 		if (req.params.page === "Special:Login") {
