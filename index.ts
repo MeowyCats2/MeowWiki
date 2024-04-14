@@ -208,7 +208,7 @@ app.get("/:page", (req, res) => {
 			show = content
 		}
 		return `<a href="/${destination}"${!(destination in pages) ? ` class="new"` : ""}>${show}</a>`
-		}): "No content.", lastUpdated));
+		}).replaceAll("\n", "<br/>") : "No content.", lastUpdated));
 	}
 	if (req.query.action === "edit") return res.send(generateEditPage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? (req.query.revision ? pages[req.params.page].history[req.query.revision].content : pages[req.params.page].content) : "", lastUpdated));
 	if (req.query.action === "history") return res.send(generatePage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? `<section id="pagehistory" class="mw-pager-body">
