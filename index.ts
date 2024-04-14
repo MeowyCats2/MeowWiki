@@ -68,10 +68,10 @@ const generatePage = (req, title, content, lastUpdated) => {
 				<div class="vector-menu-content">
 					<ul class="vector-menu-content-list">
 						<li id="ca-nstab-main" class="${req.url.includes("Talk:") ? "" : "selected "}mw-list-item">
-							<a href="${req.url.replace("Talk:", "")}"><span>Main</span></a>
+							<a href="${req.url.replace("Talk:", "")}"${req.url.split("/").at(-1).replace("Talk:", "") in pages ? "" : ` class="new"`}><span>Main</span></a>
 						</li>
 						<li id="ca-talk" class="${req.url.includes("Talk:") ? "selected " : ""}mw-list-item">
-							<a href="./Talk:${req.url.split("/").at(-1)}"><span>Talk</span></a>
+							<a href="./Talk:${req.url.split("/").at(-1)}"${req.url.split("/").at(-1) in pages ? "" : ` class="new"`}><span>Talk</span></a>
 						</li>
 					</ul>
 				</div>
@@ -123,7 +123,18 @@ const generatePage = (req, title, content, lastUpdated) => {
 </html>`
 }
 
-const generateReadPage = (req, title, content, lastUpdated) => generatePage(req, title, `<div class="mw-parser-output">${content}</div>`, lastUpdated)
+const generateReadPage = (req, title, content, lastUpdated) => generatePage(req, title, `
+${req.query.redirected_from ? `
+<div id="contentSub">
+<div id="mw-content-subtitle">
+<span class="mw-redirectedfrom">
+(Redirected from <a href="/${req.query.redirected_from.replaceAll(" ", "_")}?redirect=no" class="mw-redirect"${req.query.redirected_from.replaceAll(" ", "_") in pages ? "" : " new"}>${req.query.redirected_from}</a>)
+</span>
+</div>
+</div>
+` : ""}
+<div class="mw-parser-output">${content}</div>
+`, lastUpdated)
 
 const generateEditPage = (req, title, content, lastUpdated) => generatePage(req, `Editing <span id="firstHeadingTitle">${title}</span>`, `
 <form class="mw-editform" id="editform" name="editform" method="post" action="${url.parse(req.url).pathname}?action=submit" enctype="multipart/form-data">
@@ -154,9 +165,10 @@ let pages = {}
 let accounts = {}
 
 app.get("/", (req, res) => {
-	res.redirect("/Main_Page")
+	res.redirect("System:Main_Page" in pages ? "/" + pages["System:Main_Page"].content.replaceAll(" ", "_") : "/Main_Page")
 })
 app.get("/:page", (req, res) => {
+	if (req.params.page.includes(" ")) return res.redirect(req.url.replaceAll("%20", "_"))
 	const lastUpdated = req.params.page in pages ? "Last updated " + timeAgo.format(new Date(pages[req.params.page].date)) : ""
 	if (req.params.page.startsWith("Special:")) {
 		if (req.params.page === "Special:Login") return res.send(generateReadPage(req, "Login", `
@@ -183,18 +195,21 @@ app.get("/:page", (req, res) => {
 `, ""))
 		return
 	}
-	if (!req.query.action) return res.send(generateReadPage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? pages[req.params.page].content.replace(/\[\[(.+?)\]\]/g, (text, content) => {
-	let destination = null;
-	let show = null;
-	if (content.includes("|")) {
-		destination = content.split("|")[0].replaceAll(" ", "_")
-		show = content.split("|")[1]
-	} else {
-		destination = content.replaceAll(" ", "_")
-		show = content
+	if (!req.query.action) {
+		if (req.query.redirect !== "no" && req.params.page in pages && pages[req.params.page].content.match(/^#REDIRECT \[\[(.+)\]\]$/)) return res.redirect("/" + pages[req.params.page].content.match(/^#REDIRECT \[\[(.+)\]\]$/)[1].replaceAll(" ", "_") + "?redirected_from=" + req.params.page.replaceAll("_", " "))
+		return res.send(generateReadPage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? pages[req.params.page].content.replace(/\[\[(.+?)\]\]/g, (text, content) => {
+		let destination = null;
+		let show = null;
+		if (content.includes("|")) {
+			destination = content.split("|")[0].replaceAll(" ", "_")
+			show = content.split("|")[1]
+		} else {
+			destination = content.replaceAll(" ", "_")
+			show = content
+		}
+		return `<a href="/${destination}"${!(destination in pages) ? ` class="new"` : ""}>${show}</a>`
+		}): "No content.", lastUpdated));
 	}
-	return `<a href="/${destination}"${!(destination in pages) ? ` class="new"` : ""}>${show}</a>`
-	}): "No content.", lastUpdated));
 	if (req.query.action === "edit") return res.send(generateEditPage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? (req.query.revision ? pages[req.params.page].history[req.query.revision].content : pages[req.params.page].content) : "", lastUpdated));
 	if (req.query.action === "history") return res.send(generatePage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? `<section id="pagehistory" class="mw-pager-body">
 	<ul class="mw-contributions-list">
@@ -209,6 +224,7 @@ app.get("/:page", (req, res) => {
 });
 
 app.post("/:page", async (req, res) => {
+	if (req.params.page.includes(" ")) return res.redirect(req.url.replaceAll("%20", "_"))
 	if (req.params.page.startsWith("Special:")) {
 		if (req.params.page === "Special:Login") {
 			if (!accounts[req.body.username]) return res.send(generateReadPage(req, "Login", "Invalid username", ""))
