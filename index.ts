@@ -18,10 +18,13 @@ app.use(cookieParser())
 
 const generatePage = (req, title, content, lastUpdated) => {
 	const user = req.cookies.token ? Object.entries(accounts).find(([name, data]) => data.token === crypto.createHash("sha256").update(req.cookies.token).digest("hex")) : null;
+	const siteName = "System:Site_Name" in pages ? pages["System:Site_Name"].content : "Wiki";
 	return `<!DOCTYPE html>
 <html>
 <head>
-  <title>${"System:Site_Name" in pages ? pages["System:Site_Name"].content : "Wiki"}</title>
+  <title>${title} - ${siteName}</title>
+  <meta property="og:title" content="${title}">
+  <meta property="og:site_name" content="${siteName}">
   <link rel="stylesheet" href="https://en.wikipedia.org/w/load.php?lang=en&modules=ext.DarkMode.styles%7Cext.MobileDetect.mobileonly%7Cext.echo.styles.badge%7Cext.visualEditor.desktopArticleTarget.noscript%7Cmediawiki.page.gallery.styles%7Coojs-ui.styles.icons-alerts%7Cskins.vector.styles.legacy&only=styles&skin=vector">
   <style>
     .mw-wiki-logo {
