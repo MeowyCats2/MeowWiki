@@ -16,7 +16,7 @@ const port = 8080;
 
 app.use(cookieParser())
 
-const generatePage = (req, title, content, lastUpdated) => {
+const generatePage = (req, title, content, lastUpdated, image) => {
 	const user = req.cookies.token ? Object.entries(accounts).find(([name, data]) => data.token === crypto.createHash("sha256").update(req.cookies.token).digest("hex")) : null;
 	const siteName = "System:Site_Name" in pages ? pages["System:Site_Name"].content : "Wiki";
 	return `<!DOCTYPE html>
@@ -25,6 +25,7 @@ const generatePage = (req, title, content, lastUpdated) => {
   <title>${title} - ${siteName}</title>
   <meta property="og:title" content="${title}">
   <meta property="og:site_name" content="${siteName}">
+  ${(image || "File:Site_icon" in pages) ? `<meta property="og:image" content="${image ?? "/Special:File/File:Site_icon"}">` : ""}
   <link rel="stylesheet" href="https://en.wikipedia.org/w/load.php?lang=en&modules=ext.DarkMode.styles%7Cext.MobileDetect.mobileonly%7Cext.echo.styles.badge%7Cext.visualEditor.desktopArticleTarget.noscript%7Cmediawiki.page.gallery.styles%7Coojs-ui.styles.icons-alerts%7Cskins.vector.styles.legacy&only=styles&skin=vector">
   <style>
     .mw-wiki-logo {
@@ -129,7 +130,7 @@ const generatePage = (req, title, content, lastUpdated) => {
 </html>`
 }
 
-const generateReadPage = (req, title, content, lastUpdated) => generatePage(req, title, `
+const generateReadPage = (req, title, content, lastUpdated, image) => generatePage(req, title, `
 ${req.query.redirected_from ? `
 <div id="contentSub">
 <div id="mw-content-subtitle">
@@ -140,7 +141,7 @@ ${req.query.redirected_from ? `
 </div>
 ` : ""}
 <div class="mw-parser-output">${content}</div>
-`, lastUpdated)
+`, lastUpdated, image)
 
 const generateEditPage = (req, title, content, lastUpdated) => generatePage(req, `Editing <span id="firstHeadingTitle">${title}</span>`, `
 <form class="mw-editform" id="editform" name="editform" method="post" action="${url.parse(req.url).pathname}?action=submit" enctype="multipart/form-data">
@@ -220,6 +221,7 @@ app.get("/:page", (req, res) => {
 	}
 	if (!req.query.action) {
 		if (req.query.redirect !== "no" && req.params.page in pages && pages[req.params.page].content.match(/^#REDIRECT \[\[(.+)\]\]$/)) return res.redirect("/" + pages[req.params.page].content.match(/^#REDIRECT \[\[(.+)\]\]$/)[1].replaceAll(" ", "_") + "?redirected_from=" + req.params.page.replaceAll("_", " "))
+		const fileMatch = pages[req.params.page].content.match(/\[\[File:([^\|\n]+)\|?(.+)?\]\]/)?.[1]
 		return res.send(generateReadPage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? pages[req.params.page].content.replace(/\[\[(.+?)\]\]/g, (text, content) => {
 		let destination = null;
 		let show = null;
@@ -235,7 +237,7 @@ app.get("/:page", (req, res) => {
 		} else {
 			return `<a href="/${destination}"${!(destination in pages) ? ` class="new"` : ""}>${show}</a>`
 		}
-		}).replaceAll(/^===(.+)===$/gm, "<h3>$1</h3>").replaceAll(/^==(.+)==$/gm, "<h2>$1</h2>").replaceAll("\n", "<br/>") : "No content.", lastUpdated));
+		}).replaceAll(/^===(.+)===$/gm, "<h3>$1</h3>").replaceAll(/^==(.+)==$/gm, "<h2>$1</h2>").replaceAll("\n", "<br/>") : "No content.", lastUpdated, req.params.page in pages ? (fileMatch ? "/Special:File/" + fileMatch.replaceAll(" ", "_") : null) : null));
 	}
 	if (req.query.action === "edit") return res.send(generateEditPage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? (req.query.revision ? pages[req.params.page].history[req.query.revision].content : pages[req.params.page].content) : "", lastUpdated));
 	if (req.query.action === "history") return res.send(generatePage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? `<section id="pagehistory" class="mw-pager-body">
