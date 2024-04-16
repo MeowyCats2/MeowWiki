@@ -221,8 +221,9 @@ app.get("/:page", (req, res) => {
 	}
 	if (!req.query.action) {
 		if (req.query.redirect !== "no" && req.params.page in pages && pages[req.params.page].content.match(/^#REDIRECT \[\[(.+)\]\]$/)) return res.redirect("/" + pages[req.params.page].content.match(/^#REDIRECT \[\[(.+)\]\]$/)[1].replaceAll(" ", "_") + "?redirected_from=" + req.params.page.replaceAll("_", " "))
+		if (!(req.params.page in pages)) return res.status(404).send(generateReadPage(req, req.params.page.replaceAll("_", " "), "Page not found.", "", null))
 		const fileMatch = pages[req.params.page].content.match(/\[\[File:([^\|\n]+)\|?(.+)?\]\]/)?.[1]
-		return res.send(generateReadPage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? pages[req.params.page].content.replace(/\[\[(.+?)\]\]/g, (text, content) => {
+		return res.send(generateReadPage(req, req.params.page.replaceAll("_", " "), pages[req.params.page].content.replace(/\[\[(.+?)\]\]/g, (text, content) => {
 		let destination = null;
 		let show = null;
 		if (content.includes("|")) {
@@ -262,7 +263,7 @@ app.get("/:page", (req, res) => {
 		} else {
 			return `<a href="/${destination}"${!(destination in pages) ? ` class="new"` : ""}>${show}</a>`
 		}
-		}).replaceAll(/^===(.+)===$/gm, "<h3>$1</h3>").replaceAll(/^==(.+)==$/gm, "<h2>$1</h2>").replaceAll("\n", "<br/>") : "No content.", lastUpdated, req.params.page in pages ? (fileMatch ? "/Special:File/File:" + fileMatch.replaceAll(" ", "_") : null) : null));
+		}).replaceAll(/^===(.+)===$/gm, "<h3>$1</h3>").replaceAll(/^==(.+)==$/gm, "<h2>$1</h2>").replaceAll("\n", "<br/>"), lastUpdated, fileMatch ? "/Special:File/File:" + fileMatch.replaceAll(" ", "_") : null));
 	}
 	if (req.query.action === "edit") return res.send(generateEditPage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? (req.query.revision ? pages[req.params.page].history[req.query.revision].content : pages[req.params.page].content) : "", lastUpdated));
 	if (req.query.action === "history") return res.send(generatePage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? `<section id="pagehistory" class="mw-pager-body">
