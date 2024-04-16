@@ -233,7 +233,32 @@ app.get("/:page", (req, res) => {
 			show = content
 		}
 		if (destination in pages && pages[destination].file) {
-			return `<img src="/Special:File/${destination}" alt="${show}">`
+			let width = null
+			let height = null
+			let horizontalAlignment = null
+			let altText = null
+			for (const option of content.split("|").slice(1, Infinity)) {
+				const widthMatch = option.match(/^([0-9]+)\s?px$/)
+				if (widthMatch) {
+					width = widthMatch[1];
+				}
+				const heightMatch = option.match(/^x([0-9]+)\s?px$/)
+				if (heightMatch) {
+					height = heightMatch[1];
+				}
+				const dimensionsMatch = option.match(/^([0-9]+)x([0-9]+)\s?px$/)
+				if (dimensionsMatch) {
+					width = dimensionsMatch[1];
+					height = dimensionsMatch[2];
+				}
+				if (option === "left" || option === "right" || option === "none") horizontalAlignment = option;
+				if (option.includes("=")) {
+					if (option.split("=")[0] === "alt") {
+						altText = option.split("=")[1]
+					}
+				}
+			}
+			return `<img src="/Special:File/${destination}" ${width || height || horizontalAlignment ? `style="${width ? "width: " + width + "px;" : ""}${height ? "height: " + height + "px;" : ""}${horizontalAlignment ? "float: " + horizontalAlignment + "; clear: " + horizontalAlignment + ";" : ""}"` : ""} ${altText ? `alt="${altText}"` : ""}>`
 		} else {
 			return `<a href="/${destination}"${!(destination in pages) ? ` class="new"` : ""}>${show}</a>`
 		}
