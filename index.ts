@@ -183,6 +183,55 @@ app.get("/Special[:]File/:page", async (req, res) => {
 	if (req.params.page === "File:Site_icon") cachedSiteIcon = data;
 	res.set("Content-Type", pages[req.params.page].mimetype).send(Buffer.from(data))
 })
+
+const parsePage = (page) => page.replace(/\[\[(.+?)\]\]/g, (text, content) => {
+		let destination = null;
+		let show = null;
+		if (content.includes("|")) {
+			destination = content.split("|")[0].replaceAll(" ", "_")
+			show = content.split("|")[1]
+		} else {
+			destination = content.replaceAll(" ", "_")
+			show = content
+		}
+		if (destination in pages && pages[destination].file) {
+			let width = null
+			let height = null
+			let horizontalAlignment = null
+			let altText = null
+			for (const option of content.split("|").slice(1, Infinity)) {
+				const widthMatch = option.match(/^([0-9]+)\s?px$/)
+				if (widthMatch) {
+					width = widthMatch[1];
+				}
+				const heightMatch = option.match(/^x([0-9]+)\s?px$/)
+				if (heightMatch) {
+					height = heightMatch[1];
+				}
+				const dimensionsMatch = option.match(/^([0-9]+)x([0-9]+)\s?px$/)
+				if (dimensionsMatch) {
+					width = dimensionsMatch[1];
+					height = dimensionsMatch[2];
+				}
+				if (option === "left" || option === "right" || option === "none") horizontalAlignment = option;
+				if (option.includes("=")) {
+					if (option.split("=")[0] === "alt") {
+						altText = option.split("=")[1]
+					}
+				}
+			}
+			return `<img src="/Special:File/${destination}" ${width || height || horizontalAlignment ? `style="${width ? "width: " + width + "px;" : ""}${height ? "height: " + height + "px;" : ""}${horizontalAlignment ? "float: " + horizontalAlignment + "; clear: " + horizontalAlignment + ";" : ""}"` : ""} ${altText ? `alt="${altText}"` : ""}>`
+		} else {
+			return `<a href="/${destination}"${!(destination in pages) ? ` class="new"` : ""}>${show}</a>`
+		}
+		}).replaceAll(/^===(.+)===$/gm, "<h3>$1</h3>").replaceAll(/^==(.+)==$/gm, "<h2>$1</h2>").replaceAll("\n", "<br/>").replaceAll(/\{\{(.+)\}\}/g, (text, content) => {
+	try {
+			return parsePage(pages[content.includes(":") ? content : "Template:" + content]?.content) ?? "Template not found."
+	} catch (e) {
+		if (e instanceof RangeError) return e.message;
+		throw e;
+	}
+		})
 app.get("/:page", (req, res) => {
 	if (req.params.page.includes(" ")) return res.redirect(req.url.replaceAll("%20", "_"))
 	const lastUpdated = req.params.page in pages ? "Last updated " + timeAgo.format(new Date(pages[req.params.page].date)) : ""
@@ -223,47 +272,7 @@ app.get("/:page", (req, res) => {
 		if (req.query.redirect !== "no" && req.params.page in pages && pages[req.params.page].content.match(/^#REDIRECT \[\[(.+)\]\]$/)) return res.redirect("/" + pages[req.params.page].content.match(/^#REDIRECT \[\[(.+)\]\]$/)[1].replaceAll(" ", "_") + "?redirected_from=" + req.params.page.replaceAll("_", " "))
 		if (!(req.params.page in pages)) return res.status(404).send(generateReadPage(req, req.params.page.replaceAll("_", " "), "Page not found.", "", null))
 		const fileMatch = pages[req.params.page].content.match(/\[\[File:([^\|\n]+)\|?(.+)?\]\]/)?.[1]
-		return res.send(generateReadPage(req, req.params.page.replaceAll("_", " "), pages[req.params.page].content.replace(/\[\[(.+?)\]\]/g, (text, content) => {
-		let destination = null;
-		let show = null;
-		if (content.includes("|")) {
-			destination = content.split("|")[0].replaceAll(" ", "_")
-			show = content.split("|")[1]
-		} else {
-			destination = content.replaceAll(" ", "_")
-			show = content
-		}
-		if (destination in pages && pages[destination].file) {
-			let width = null
-			let height = null
-			let horizontalAlignment = null
-			let altText = null
-			for (const option of content.split("|").slice(1, Infinity)) {
-				const widthMatch = option.match(/^([0-9]+)\s?px$/)
-				if (widthMatch) {
-					width = widthMatch[1];
-				}
-				const heightMatch = option.match(/^x([0-9]+)\s?px$/)
-				if (heightMatch) {
-					height = heightMatch[1];
-				}
-				const dimensionsMatch = option.match(/^([0-9]+)x([0-9]+)\s?px$/)
-				if (dimensionsMatch) {
-					width = dimensionsMatch[1];
-					height = dimensionsMatch[2];
-				}
-				if (option === "left" || option === "right" || option === "none") horizontalAlignment = option;
-				if (option.includes("=")) {
-					if (option.split("=")[0] === "alt") {
-						altText = option.split("=")[1]
-					}
-				}
-			}
-			return `<img src="/Special:File/${destination}" ${width || height || horizontalAlignment ? `style="${width ? "width: " + width + "px;" : ""}${height ? "height: " + height + "px;" : ""}${horizontalAlignment ? "float: " + horizontalAlignment + "; clear: " + horizontalAlignment + ";" : ""}"` : ""} ${altText ? `alt="${altText}"` : ""}>`
-		} else {
-			return `<a href="/${destination}"${!(destination in pages) ? ` class="new"` : ""}>${show}</a>`
-		}
-		}).replaceAll(/^===(.+)===$/gm, "<h3>$1</h3>").replaceAll(/^==(.+)==$/gm, "<h2>$1</h2>").replaceAll("\n", "<br/>"), lastUpdated, fileMatch ? "/Special:File/File:" + fileMatch.replaceAll(" ", "_") : null));
+		return res.send(generateReadPage(req, req.params.page.replaceAll("_", " "), parsePage(pages[req.params.page].content), lastUpdated, fileMatch ? "/Special:File/File:" + fileMatch.replaceAll(" ", "_") : null));
 	}
 	if (req.query.action === "edit") return res.send(generateEditPage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? (req.query.revision ? pages[req.params.page].history[req.query.revision].content : pages[req.params.page].content) : "", lastUpdated));
 	if (req.query.action === "history") return res.send(generatePage(req, req.params.page.replaceAll("_", " "), req.params.page in pages ? `<section id="pagehistory" class="mw-pager-body">
