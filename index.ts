@@ -266,6 +266,7 @@ app.get("/:page", (req, res) => {
 <br/>
 <input type="submit" value="submit">
 </form>`))
+		if (req.params.page === "Special:AllPages") res.send(generateReadPage(req, "All pages", "<ul>" + Object.keys(pages).map(page => `<li><a href="/${page}">${page.replaceAll("_", " ")}</a></li>`).join("<br/>") + "</ul>"))
 		return
 	}
 	if (!req.query.action) {
